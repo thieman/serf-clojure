@@ -1,6 +1,6 @@
 (ns serf.command
   (:require [lamina.core :refer [enqueue]]
-            [msgpack.core :refer [pack unpack]]))
+            [msgpack.core :refer [pack]]))
 
 (def seqs (ref {}))
 

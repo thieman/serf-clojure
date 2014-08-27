@@ -1,9 +1,12 @@
 (ns serf.client
   (:require [clojure.core.incubator :refer [dissoc-in]]
-            [lamina.core :refer [enqueue wait-for-result]]
+            [lamina.core :refer [enqueue wait-for-result wait-for-message]]
             [aleph.tcp :refer [tcp-client]]
+            [msgpack.core :refer [pack unpack]]
             [serf.command :refer [send-command]]
             [serf.response :refer [parse raise-on-error]]))
+
+(declare receive)
 
 (def responses (ref {}))
 
