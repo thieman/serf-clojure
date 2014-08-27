@@ -1,14 +1,23 @@
 # serf
 
-A Clojure library designed to ... well, that part is up to you.
+An incomplete Clojure client for Serf
 
 ## Usage
 
-FIXME
+```clojure
+(ns myapp.core
+  (:require [serf.client :refer [make-client send-command!]]))
 
-## License
+(def c (make-client {:host "localhost" :port 7373}))
 
-Copyright © 2014 FIXME
+(send-command! c :handshake)
 
-Distributed under the Eclipse Public License either version 1.0 or (at
-your option) any later version.
+(send-command! c :event "deploy" "a payload" false)
+```
+
+## Methods Implemented
+
+* handshake
+* members
+* event
+* query
