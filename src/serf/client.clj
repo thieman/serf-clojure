@@ -2,7 +2,8 @@
   (:require [clojure.core.incubator :refer [dissoc-in]]
             [lamina.core :refer [enqueue wait-for-result]]
             [aleph.tcp :refer [tcp-client]]
-            [serf.command :refer [send-command]]))
+            [serf.command :refer [send-command]]
+            [serf.response :refer [parse raise-on-error]]))
 
 (def responses (ref {}))
 
@@ -32,7 +33,8 @@
     (dosync
      (let [response (get-in @responses [client request-seq])]
        (commute responses dissoc-in [client request-seq])
-       response))))
+       (raise-on-error response)
+       (parse command response)))))
 
 (defn- get-response
   "Read from the channel and return responses as a byte stream."
