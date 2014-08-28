@@ -1,28 +1,30 @@
 (ns serf.client
   (:require [clojure.core.incubator :refer [dissoc-in]]
-            [lamina.core :refer [enqueue wait-for-result wait-for-message]]
-            [aleph.tcp :refer [tcp-client]]
             [msgpack.core :refer [pack unpack]]
             [serf.command :refer [send-command]]
-            [serf.response :refer [parse raise-on-error]]))
+            [serf.response :refer [parse raise-on-error]])
+  (:import [java.net Socket SocketTimeoutException]
+           [java.io BufferedReader DataOutputStream]))
 
 (declare receive)
 
 (def responses (ref {}))
 
 (defn make-client
-  "Create an Aleph TCP client for communicating with the Serf agent."
+  "Create an TCP socket for communicating with the Serf agent."
   ([] (make-client {}))
   ([{host :host port :port}]
-     (wait-for-result
-      (tcp-client {:host (or host "localhost")
-                   :port (or port 7373)}))))
+     (let [socket (new Socket (or host "localhost") (or port 7373))]
+       (.setSoTimeout socket 2000)
+       {:socket socket
+        :in (.getInputStream socket)
+        :out (.getOutputStream socket)})))
 
 (defn- wait-for-done
   "Wait until all responses from this seq have been received."
   [client command request-seq]
+  (receive client)
   (when (#{:query} command)
-    (receive client)
     (let [seq-responses (get-in @responses [client request-seq])]
       (when-not (seq (filter #(= "done" (% "Type")) seq-responses))
         (recur client command request-seq)))))
@@ -31,7 +33,6 @@
   "Synchronously send a request, wait for the response, and return it."
   [client command & args]
   (let [request-seq (apply send-command client command args)]
-    (receive client)
     (wait-for-done client command request-seq)
     (dosync
      (let [response (get-in @responses [client request-seq])]
@@ -39,20 +40,11 @@
        (raise-on-error response)
        (parse command response)))))
 
-(defn- get-response
-  "Read from the channel and return responses as a byte stream."
-  [buffer]
-  (loop [buf buffer
-         acc []]
-    (if (.readable buffer)
-      (recur buffer (conj acc (.readByte buffer)))
-      acc)))
-
 (defn- unpack-multiple
   "Unpack multiple msgpack structures from a byte sequence,
   returning them as a seq. Fairly inefficient."
-  [byte-stream]
-  (loop [stream (get-response byte-stream)
+  [byte-seq]
+  (loop [stream byte-seq
          acc []]
     (if (seq stream)
       (let [obj (unpack stream)
@@ -60,11 +52,20 @@
         (recur (drop byte-count stream) (conj acc obj)))
       acc)))
 
+(defn- read-socket [client]
+  (try
+    (let [first (.read (:in client))]
+      (loop [acc [first]]
+        (if-not (zero? (.available (:in client)))
+          (recur (conj acc (.read (:in client))))
+          (seq acc))))
+    (catch SocketTimeoutException e nil)))
+
 (defn- receive
   "Receive potentially multiple commands from the client connection
   and add them to the responses ref."
   [client]
-  (let [received (wait-for-message client 2000)
+  (let [received (read-socket client)
         response-objs (unpack-multiple received)]
     (loop [response-objs response-objs]
       (let [this-response (first response-objs)
