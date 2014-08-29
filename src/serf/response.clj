@@ -16,9 +16,11 @@
     members))
 
 (defmethod parse :query [command responses]
-  (letfn [(fold-responses [acc response]
+  (letfn [(parse-payload [payload]
+            (apply str (map char payload)))
+          (fold-responses [acc response]
             (if (= (response "Type") "response")
-              (assoc acc (response "From") (response "Payload"))
+              (assoc acc (response "From") (parse-payload (response "Payload")))
               acc))]
     (reduce fold-responses {} responses)))
 
